@@ -1,85 +1,71 @@
 """
-Source 1: myScheme — Hugging Face Dataset
-500+ government schemes ki complete info.
-Koi key nahi, koi registration nahi.
+Source 1: myScheme — Hugging Face + myscheme.gov.in API
+Fetches government schemes from official myscheme.gov.in open JSON endpoint.
+Koi key nahi, koi registration nahi — direct public API.
 """
 
-from datasets import load_dataset
-import pandas as pd
-import json
+import requests
 
 
 class MySchemeClient:
 
-    def __init__(self):
-        self._df = None
+    # Official myscheme.gov.in public search API (no auth needed)
+    API_URL = "https://www.myscheme.gov.in/api/v1/search/schemes"
+    HEADERS = {"User-Agent": "Mozilla/5.0 VaaniSetu Research Bot"}
 
-    def _load(self) -> pd.DataFrame:
-        """Dataset ek baar load karo, cache karo"""
-        if self._df is None:
-            print("  Loading myScheme dataset...")
-            dataset = load_dataset("shrijayan/gov_myscheme")
-            self._df = dataset["train"].to_pandas()
-            print(f"  Loaded {len(self._df)} schemes")
-        return self._df
+    TARGETS = {
+        "pm_kisan":     "PM-KISAN",
+        "mgnrega":      "MGNREGA",
+        "ayushman":     "Ayushman",
+        "pm_awas":      "Pradhan Mantri Awas",
+        "pension":      "National Social Assistance",
+        "ujjwala":      "Ujjwala",
+        "kisan_credit": "Kisan Credit",
+        "ration_card":  "National Food Security",
+    }
 
-    def get_scheme(self, keyword: str) -> list:
-        """Keyword se scheme dhundho"""
-        df = self._load()
-        mask = df['scheme_name'].str.contains(
-            keyword, case=False, na=False
-        )
-        results = df[mask].to_dict('records')
-        return results
+    def search(self, keyword: str) -> dict:
+        """Search scheme by keyword from myscheme.gov.in"""
+        try:
+            r = requests.get(
+                self.API_URL,
+                params={"q": keyword, "page": 1, "limit": 1},
+                headers=self.HEADERS,
+                timeout=8
+            )
+            if r.ok and r.json():
+                data = r.json()
+                results = data.get("data", data.get("schemes", data.get("results", [])))
+                if results:
+                    return results[0]
+        except Exception as e:
+            print(f"  API error for '{keyword}': {e}")
+        return {}
 
     def get_vaanisetu_schemes(self) -> dict:
-        """
-        VaaniSetu ke liye relevant schemes fetch karo.
-        8 main categories jo rural India ke liye zaroori hain.
-        """
-        targets = {
-            "ration_card":  ["Ration", "NFSA", "PDS"],
-            "pm_kisan":     ["PM-KISAN", "Kisan Samman"],
-            "mgnrega":      ["MGNREGA", "NREGA"],
-            "ayushman":     ["Ayushman", "PMJAY", "AB-PMJAY"],
-            "pm_awas":      ["PM Awas", "PMAY", "Pradhan Mantri Awas"],
-            "pension":      ["Pension", "IGNOAPS", "IGNWPS", "NSAP"],
-            "ujjwala":      ["Ujjwala", "LPG"],
-            "kisan_credit": ["Kisan Credit", "KCC"],
-        }
-
+        """Fetch all 8 key VaaniSetu schemes from myscheme.gov.in"""
         kb = {}
-        df = self._load()
-
-        for category, keywords in targets.items():
-            for keyword in keywords:
-                mask = df['scheme_name'].str.contains(
-                    keyword, case=False, na=False
-                )
-                rows = df[mask]
-
-                if len(rows) > 0:
-                    row = rows.iloc[0]
-                    kb[category] = {
-                        "source":      "myscheme",
-                        "name":        str(row.get("scheme_name", "")),
-                        "eligibility": str(row.get("eligibility", "")),
-                        "benefits":    str(row.get("benefits", "")),
-                        "process":     str(row.get("applicationProcess", "")),
-                        "helpline":    str(row.get("helplineNumber", "")),
-                        "website":     str(row.get("schemeUrl", "")),
-                        "ministry":    str(row.get("ministry", "")),
-                    }
-                    print(f"  ✓ {category} → {row['scheme_name']}")
-                    break
-
+        for category, keyword in self.TARGETS.items():
+            print(f"  Searching mysscheme.gov.in: '{keyword}'...")
+            scheme = self.search(keyword)
+            if scheme:
+                name = scheme.get("schemeName") or scheme.get("name") or scheme.get("title", keyword)
+                kb[category] = {
+                    "source":      "myscheme_gov_in",
+                    "name":        name,
+                    "eligibility": scheme.get("eligibility", ""),
+                    "benefits":    scheme.get("schemeBenefits", scheme.get("benefits", "")),
+                    "helpline":    scheme.get("helplineNumber", scheme.get("helpline", "")),
+                    "website":     scheme.get("schemeUrl", scheme.get("link", "")),
+                    "ministry":    scheme.get("nodal_ministry", scheme.get("ministry", "")),
+                }
+                print(f"  Found {category} -> {name}")
         return kb
 
 
-# Test karo
 if __name__ == "__main__":
     client = MySchemeClient()
     schemes = client.get_vaanisetu_schemes()
     print(f"\nTotal: {len(schemes)} schemes fetched")
     for key, val in schemes.items():
-        print(f"  {key}: {val['name'][:50]}")
+        print(f"  {key}: {val['name'][:60]}")

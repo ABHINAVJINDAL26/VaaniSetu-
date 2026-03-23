@@ -92,16 +92,28 @@ async def process_voice(
         # Hardcoded fallback mapping in case KB Editor mapping misses
         if not matched_scheme:
             if "kisan" in lower_transcript or "samman" in lower_transcript or "किसान" in lower_transcript or "सम्मान" in lower_transcript:
-                intent = "pm_kisan"
+                return VoiceResponse(
+                    transcript=transcript,
+                    intent="pm_kisan",
+                    matched_scheme=None,
+                    answer_text="PM Kisan Samman Nidhi ke tehat aapko saal mein 6000 rupaye 3 kishton mein milte hain. Iske liye aadhaar aur bank account link hona chahiye."
+                )
             elif "awas" in lower_transcript or "ghar" in lower_transcript or "makan" in lower_transcript or "आवास" in lower_transcript or "घर" in lower_transcript:
-                intent = "pm_awas"
+                return VoiceResponse(
+                    transcript=transcript,
+                    intent="pm_awas",
+                    matched_scheme=None,
+                    answer_text="PM Awas Yojana ke tehat sarkar garib parivaro ko pakka ghar banane ke liye 1.20 Lakh rupaye ki madad deti hai."
+                )
             elif "vishwakarma" in lower_transcript or "shilp" in lower_transcript or "विश्वकर्मा" in lower_transcript or "शिल्प" in lower_transcript:
-                intent = "pm_vishwakarma"
-                
-            if intent != "unknown":
-                matched_scheme = db.query(Scheme).filter(Scheme.scheme_id == intent).first()
+                return VoiceResponse(
+                    transcript=transcript,
+                    intent="pm_vishwakarma",
+                    matched_scheme=None,
+                    answer_text="PM Vishwakarma Yojana shilpkaro (jaise badhai, lohar) ke liye hai. Isme 15000 ka toolkit aur 3 lakh tak ka free collateral loan milta hai."
+                )
 
-        # Return Resolution Payload
+        # Return Resolution Payload from DB if matched
         if matched_scheme:
             answer = matched_scheme.qa_pairs[0].get("answer_text", "Scheme details found.") if matched_scheme.qa_pairs else matched_scheme.description
             return VoiceResponse(
